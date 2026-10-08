@@ -152,7 +152,11 @@ def fetch(src, outdir, client=None, kind=None, quality="best"):
 
     if kind == "file":
         meta["title"] = os.path.basename(src)
-        return {"video": os.path.abspath(src), "meta": meta}
+        # Later steps read work/rec.mp4; link rather than copy multi-GB files.
+        if os.path.lexists(video):
+            os.remove(video)
+        os.symlink(os.path.abspath(src), video)
+        return {"video": video, "meta": meta}
 
     if kind in ("youtube", "zoom", "generic"):
         cmd = ["yt-dlp", "-f", "bv*+ba/b", "-o", video, src]
