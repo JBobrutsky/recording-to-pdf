@@ -1,8 +1,9 @@
 # recording-to-pdf
 
-Turn a recorded talk into a document people actually read: a typeset PDF with
-the speaker's own slides pulled out of the video, quotes that carry timestamps,
-and correct right-to-left rendering for Hebrew.
+Turn a recorded talk or meeting into a document people actually read: a typeset
+PDF with the speaker's own slides pulled out of the video, verbatim quotes, and
+correct right-to-left rendering for Hebrew. For meetings it adds the decisions,
+per-owner assignments and a machine-readable record.
 
 Built for conference sessions and long workshops, where a 40-minute recording
 is the only artefact and nobody is going to watch it twice.
@@ -16,9 +17,9 @@ is the only artefact and nobody is going to watch it twice.
 | Stage | What happens |
 |---|---|
 | **fetch** | Resolves the recording and downloads it. Handles YouTube, auth-gated Zoom, AWS Summit / Corrivium livestream sites, direct HLS, and local files |
-| **asr** | Transcribes locally with Whisper on Apple Silicon, then collapses the output into 90-second timestamped blocks that are actually readable |
+| **asr** | Transcribes locally with Whisper — `mlx-whisper` on Apple Silicon, `faster-whisper` on CPU elsewhere; ivrit.ai's Hebrew fine-tune for `--lang he` — then collapses the output into 90-second timestamped blocks that are actually readable |
 | **slides** | Scene-detects the deck out of the video, removes near-duplicates, and crops the slide rectangle out of the stage shot |
-| **render** | Takes a `content.json` and produces DOCX + PDF, slides interleaved with the argument |
+| **render** | Takes a `content.json` and produces DOCX + PDF, slides interleaved with the argument. `[m:ss]` references are stripped by default (`--timestamps` keeps them); with a `meeting` object it adds decisions, assignments by owner, `record.json` and a row in an index |
 
 The writing between `slides` and `render` is yours — or your LLM's. That is
 deliberate: this tool does the mechanical work and gets out of the way of the
@@ -60,9 +61,15 @@ python3.12 -m venv .venv          # 3.12: mlx-whisper does not build on 3.14
 .venv/bin/pip install -r requirements.txt
 ```
 
-Transcription uses `mlx-whisper`, which is Apple Silicon only. On other
-hardware, swap `lib/asr.py` for `faster-whisper` or `whisper.cpp`; nothing else
-in the pipeline changes.
+Transcription uses `mlx-whisper` on Apple Silicon. Anywhere else `lib/asr.py`
+falls back to `faster-whisper` on CPU (`pip install faster-whisper`) with the
+same models as CTranslate2 builds; nothing else in the pipeline changes.
+
+**Hebrew.** With `--lang he` the default model is
+[ivrit.ai](https://huggingface.co/ivrit-ai)'s fine-tune of Whisper
+large-v3-turbo. On a real Hebrew meeting it fixed most of the garbled words the
+base model produced and returned full, punctuated sentences, at about the same
+speed. Override with `R2R_MODEL=<hf repo>`.
 
 ## Quickstart
 
@@ -85,6 +92,7 @@ judgement starts.
 | Zoom | Needs `--cookies-from-browser chrome`. Without it `yt-dlp` reports "no video formats found", which looks like a format problem and is actually auth |
 | AWS Summit / Corrivium | Resolves the event site to its CMS config and then to the MediaConvert HLS manifest. The video masters carry video-only renditions plus a separate audio group, so both are muxed explicitly |
 | Direct HLS / local file | Passed straight through |
+| Live Zoom meeting (macOS) | Record it yourself: OBS captures the Zoom app's audio, `lib/zoom_wincap.sh` grabs the Zoom window every 3 s (works while covered), and `lib/zoom_speakers.py` reads the green active-speaker tile with macOS Vision to build a speaker timeline. See `SKILL.md` |
 
 `bin/r2r list <event-url>` enumerates every session on a Corrivium event site,
 and `lib/batch.py` runs the whole conference, deleting each video once the
@@ -112,7 +120,7 @@ The document is data. See [lib/schema.md](lib/schema.md) for the full schema and
 What makes the document good, learned the hard way:
 
 - Interleave slides with the argument. An appendix of images gets skipped.
-- Every quote verbatim, with its timestamp, checked against the recording.
+- Every quote verbatim, checked against the recording at its timestamp.
 - Bold lead on a bullet carries the claim; the rest carries the evidence.
 - Reconcile transcript against deck. The slides hold facts the audio does not,
   and speech recognition garbles names and domain terms in every language.
@@ -126,7 +134,9 @@ slides, writes `content.json`, and renders. That is how the example was made.
 
 ## Limitations
 
-- Transcription is Apple Silicon only as shipped.
+- Transcription is fast on Apple Silicon; the CPU fallback runs at roughly
+  real time.
+- Speaker attribution from Zoom tiles needs macOS (Vision OCR).
 - A talking-head recording with no screen share yields no slides. Check a probe
   frame before running the whole video.
 - The crop heuristic wants a roughly 16:9 screen with visible edges. Odd stage

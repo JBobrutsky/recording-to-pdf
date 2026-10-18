@@ -1,13 +1,13 @@
 ---
 name: recording-to-pdf
-description: Turn any talk recording (YouTube, Zoom, AWS Summit / Corrivium livestream, or a local file) into a polished review document — Hebrew or English PDF/DOCX with the speaker's own slides extracted from the video, quotes and timestamps. Use when someone asks to summarise, write up, or "make a PDF" from a recorded session, webinar, workshop or conference talk.
+description: Turn any talk or meeting recording (YouTube, X, AWS Summit / Corrivium livestream, a live Zoom meeting recorded on a Mac, or a local file) into a polished review document — Hebrew or English PDF/DOCX with the speaker's own slides, quotes, and for meetings the decisions and per-owner assignments plus a machine-readable record other sessions can read. Use when someone asks to record a Zoom, summarise, write up, or "make a PDF" from a recorded session, meeting, webinar, workshop or conference talk.
 ---
 
 # Recording → review pack
 
 Produces the artefact people actually read: a sectioned document, slides
-interleaved with the argument, every claim carrying a timestamp back to the
-recording. First built for a 5h49m Zoom workshop (42 pages), then generalised.
+interleaved with the argument, every claim traceable to the recording
+(timestamps are stripped from the output by default; `--timestamps` keeps them). First built for a 5h49m Zoom workshop (42 pages), then generalised.
 
 ## Toolchain
 
@@ -49,6 +49,11 @@ Summit event site — that is how you batch a whole conference.
 ## Stage notes that matter
 
 **Transcription.** `mlx-whisper` large-v3-turbo, ~12× realtime on an M1 Pro.
+Hebrew (`--lang he`) uses ivrit.ai's fine-tune of the same model
+(`mlx-community/ivrit-ai-whisper-large-v3-turbo-mlx`): on a real meeting it
+fixed most garbled words and returned full punctuated sentences, at about the
+same speed. It still misspells some names, so keep the roster prompt.
+`R2R_MODEL=<hf repo>` overrides the choice.
 Always pass `--lang`; auto-detect latches onto the wrong language when a talk
 opens with English pre-show noise. `condition_on_previous_text=False` stops
 repetition loops during silence. Read `transcript_blocks.txt` (90-second
@@ -81,8 +86,83 @@ See `lib/schema.md`. Structure that works:
 7. Glossary
 
 Rules: interleave images with the argument, never append them; every quote
-verbatim with `[m:ss]`; give each image a descriptive caption rather than
+verbatim (draft with `[m:ss]`, render strips them by default); when a deck is
+supplied, every slide goes in as an image next to its section; give each image a descriptive caption rather than
 repeating the heading; flag uncertain names instead of asserting them.
+
+## Meetings (work vs. not)
+
+A recording is a **meeting** when it is a live call among colleagues (Zoom
+meeting the user joined, a forwarded meeting invite, tiles of named
+participants) rather than a published talk. For meetings add the `meeting`
+object to content.json (see `lib/schema.md`).
+
+**Classify `context` yourself, don't ask:**
+- `work` (+ an `org` label) when the invite addresses, the Zoom host domain
+  (`<company>.zoom.us`), branding in the frames or internal system names in the
+  transcript point at the user's employer. Keep the list of those signals in your
+  own private notes, not in this repo.
+- `personal` for the user's own non-work calls; `public` is for talks (then omit
+  `meeting` entirely).
+
+**What a meeting record must capture** (another session reads it to know what
+happened): a 2–3 sentence `summary`; `decisions` as short statements;
+`actions` with one row per task and a named `owner` (use the participant's
+name as it appears in Zoom; "לא נקבע" when nobody took it); `due` only if said;
+`open_questions`. Who said what is often unclear in ASR — attribute only when
+the transcript or tile makes it clear, otherwise leave the owner as said
+("הצוות של מיכל").
+
+**Status-round meetings** (e.g. a weekly team sync over a shared Jira board):
+people report roughly in the order of the board's quick-filter buttons
+(left→right, or reversed on another board). Read the filter bar from a frame
+and use that order to attribute each update; the name the host calls out
+("איתי, בוקר טוב") anchors it. **Attribute with the speaker timeline first:**
+`.venv/bin/python lib/zoom_speakers.py <win_dir> work/transcript.json <audio start HH:MM:SS> work/attributed.txt`
+OCRs the green active-speaker tile in every other window capture (macOS Vision)
+and writes the transcript with `<<name>>` at each change — write the per-person
+table from that. Re-run ASR with `initial_prompt` = participant names + domain
+terms and `no_speech_threshold=0.9`; the default pass silently drops stretches.
+When in doubt, check the Zoom frames at that moment: the active speaker's tile
+has a green border (frame time = recording start + transcript offset). The person
+called on is not always the one who answers. Ask the user who was absent before
+attributing by board order. If you keep a roster of correct name spellings,
+check it before writing names.
+
+**Render with an index:**
+```bash
+$R render work/ --content content.json --name NAME --index reviews/INDEX.md
+```
+This writes `work/out/record.json` + `record.md` next to the PDF and upserts
+one row in `INDEX.md` (date · context · title · #actions · record path), so
+other sessions can find what was decided.
+
+Meeting recordings and reviews are private material: keep them outside any
+public repo, and don't send them anywhere the user didn't name.
+
+## Recording a live Zoom on a Mac
+
+- Audio: OBS (`open -a OBS --args --startrecording --minimize-to-tray`), source
+  "macOS Screen Capture" in **application mode on Zoom** (scene JSON:
+  `type: 2, application: "us.zoom.xos"`), Capture Audio on. Display mode can
+  come back black with near-silent audio (≈ −42 dB flat).
+- **Verify by transcribing, not by volume:** after ~30 s, cut the last 30 s and
+  run mlx-whisper on it. Silence comes back as "תודה רבה." or gibberish; good
+  meeting audio sits around −22 dB mean. Do this check again once people
+  actually start talking.
+- Picture: capture the **Zoom Meeting window**, not the screen, so the user can
+  keep working — `screencapture -x -o -l<windowid> -t jpg` every 3 s, window id
+  from `CGWindowListCopyWindowInfo` (owner `zoom.us`, name "Zoom Meeting",
+  layer 0), re-resolved every minute — `lib/zoom_wincap.sh <scratch> <rec_dir>`
+  with `lib/zoom_window.swift` does exactly this. Works while covered; fails only if
+  minimised. Feed those JPEGs to the slide step instead of `r2r slides`.
+- End trigger: poll `pgrep CptHost` (Zoom's in-meeting process). Never use
+  System Events window lists — Accessibility can be revoked mid-meeting.
+- Health check every 3 min (frames growing, OBS up, audio not silent) and tell
+  the user immediately if one fails.
+- OBS traps: a quit leaves a crash sentinel → next launch blocks on a dialog;
+  delete `~/Library/Application Support/obs-studio/.sentinel/*` first. Edit the
+  scene JSON only with OBS closed (it overwrites on exit).
 
 ## Hebrew / RTL
 

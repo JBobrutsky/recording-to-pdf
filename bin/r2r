@@ -6,7 +6,7 @@
   r2r list   <event-url>           # every session on a Corrivium/AWS event site
   r2r asr    <work> [--lang he]
   r2r slides <work> [--thresh .12] [--flat .18] [--per 30]
-  r2r render <work> --content c.json [--name review]
+  r2r render <work> --content c.json [--name review] [--timestamps] [--index INDEX.md]
   r2r all    <url> <work> [--lang he]   # fetch + asr + slides (stops for writing)
 """
 import argparse, json, os, subprocess, sys
@@ -41,6 +41,7 @@ def main():
 
     r = sub.add_parser("render"); r.add_argument("work")
     r.add_argument("--content", required=True); r.add_argument("--name", default="review")
+    r.add_argument("--timestamps", action="store_true"); r.add_argument("--index")
 
     al = sub.add_parser("all"); al.add_argument("src"); al.add_argument("work")
     al.add_argument("--lang"); al.add_argument("--client")
@@ -64,7 +65,9 @@ def main():
             "--thresh", o.thresh, "--flat", o.flat, "--hamming", o.hamming, "--per", o.per)
     elif o.cmd == "render":
         run("render.py", o.content, os.path.join(work, "out"), "--name", o.name,
-            "--slides", os.path.join(work, "frames", "kept"))
+            "--slides", os.path.join(work, "frames", "kept"),
+            *(["--timestamps"] if o.timestamps else []),
+            *(["--index", o.index] if o.index else []))
     elif o.cmd == "all":
         run("fetch.py", o.src, work, *(["--client", o.client] if o.client else []))
         run("asr.py", os.path.join(work, "rec.mp4"), work,

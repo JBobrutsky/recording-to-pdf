@@ -1,8 +1,32 @@
 # -*- coding: utf-8 -*-
-"""Transcribe with mlx-whisper (Apple Silicon) and emit reader-friendly blocks."""
+"""Transcribe with mlx-whisper (Apple Silicon), or faster-whisper on CPU
+elsewhere (Windows/Linux), and emit reader-friendly blocks."""
 import json, os, subprocess, sys, time
 
-MODEL = os.environ.get("R2R_MODEL", "mlx-community/whisper-large-v3-turbo")
+# ivrit.ai's Hebrew fine-tune of the same turbo model: far fewer garbled words
+# and real sentences on Hebrew meetings. Base model for everything else.
+MODELS = {"he": "mlx-community/ivrit-ai-whisper-large-v3-turbo-mlx"}
+DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo"
+
+
+def model_for(lang):
+    return os.environ.get("R2R_MODEL") or MODELS.get(lang, DEFAULT_MODEL)
+
+
+# The same models as CTranslate2 builds, for faster-whisper (no Apple GPU).
+FW_MODELS = {"he": "ivrit-ai/whisper-large-v3-turbo-ct2"}
+FW_DEFAULT_MODEL = "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
+
+
+def fw_transcribe(audio, lang):
+    """faster-whisper on CPU; returns the same shape as mlx_whisper.transcribe."""
+    from faster_whisper import WhisperModel
+    name = os.environ.get("R2R_MODEL") or FW_MODELS.get(lang, FW_DEFAULT_MODEL)
+    model = WhisperModel(name, device="cpu", compute_type="int8")
+    segs, info = model.transcribe(audio, language=lang, condition_on_previous_text=False)
+    segs = [{"start": s.start, "end": s.end, "text": s.text} for s in segs]
+    return {"text": "".join(s["text"] for s in segs), "segments": segs,
+            "language": info.language}
 
 
 def extract_audio(video, out):
@@ -34,16 +58,23 @@ def blocks(segments, window=90):
 
 
 def transcribe(audio, outdir, lang=None, window=90):
-    import contextlib, io, mlx_whisper
+    import contextlib, io
     t0 = time.time()
-    kw = dict(path_or_hf_repo=MODEL, verbose=False, condition_on_previous_text=False)
+    try:
+        import mlx_whisper
+    except ImportError:
+        mlx_whisper = None
+    kw = dict(path_or_hf_repo=model_for(lang), verbose=False, condition_on_previous_text=False)
     if lang:
         kw["language"] = lang
     # mlx-whisper writes a tqdm bar to stderr regardless of verbose=False,
     # which drowns a batch log. Swallow it; keep real errors.
     buf = io.StringIO()
-    with contextlib.redirect_stderr(buf):
-        r = mlx_whisper.transcribe(audio, **kw)
+    if mlx_whisper is None:
+        r = fw_transcribe(audio, lang)
+    else:
+        with contextlib.redirect_stderr(buf):
+            r = mlx_whisper.transcribe(audio, **kw)
     os.makedirs(outdir, exist_ok=True)
     json.dump(r, open(f"{outdir}/transcript.json", "w"), ensure_ascii=False)
     with open(f"{outdir}/transcript.txt", "w") as f:
