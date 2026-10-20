@@ -6,11 +6,13 @@
 Finds the green active-speaker border in the tile strip of each frame, OCRs the
 name with macOS Vision (ocr_tiles.swift), and writes the transcript with a
 <<speaker>> marker at every change. Names ending in "?" were inferred from the
-nearest earlier run, not seen in a frame.
+nearest earlier run, not seen in a frame. With R2R_PEOPLE set, tile names
+are mapped to the people file's canonical names.
 """
 import glob, json, os, re, subprocess, sys, tempfile
 import numpy as np
 from PIL import Image
+from people import load, canonical
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -38,10 +40,12 @@ def main(win_dir, seg_json, start, out):
     ocr = subprocess.run(["swift", os.path.join(HERE, "ocr_tiles.swift"), tmp],
                          capture_output=True, text=True).stdout
     h, m, s = map(int, start.split(":")); t0 = h * 3600 + m * 60 + s
+    names = canonical(load())
     runs = []
     for l in ocr.splitlines():
         f, _, name = l.strip().partition(" ")
         name = re.sub(r"@.*", "", name.split(" | ")[-1]).replace("...", "").strip()
+        name = names.get(name.lower(), name)
         t = int(f[:2]) * 3600 + int(f[2:4]) * 60 + int(f[4:6]) - t0
         if not name or t < -5:
             continue

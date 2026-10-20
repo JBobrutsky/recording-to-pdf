@@ -6,3 +6,8 @@ work/
 *.wav
 *.m4a
 .DS_Store
+# private people files (real names/roles) — see examples/people.example.md
+PEOPLE.md
+people.md
+*.people.md
+people.local.*

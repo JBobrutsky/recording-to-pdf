@@ -18,13 +18,14 @@ FW_MODELS = {"he": "ivrit-ai/whisper-large-v3-turbo-ct2"}
 FW_DEFAULT_MODEL = "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
 
 
-def fw_transcribe(audio, lang):
+def fw_transcribe(audio, lang, initial_prompt=None):
     """faster-whisper on CPU; returns the same shape as mlx_whisper.transcribe."""
     from faster_whisper import WhisperModel, BatchedInferencePipeline
     name = os.environ.get("R2R_MODEL") or FW_MODELS.get(lang, FW_DEFAULT_MODEL)
     model = WhisperModel(name, device="cpu", compute_type="int8")
     # batched decoding: ~25% faster on a 4-vCPU VM, same text
-    segs, info = BatchedInferencePipeline(model=model).transcribe(audio, language=lang, batch_size=8)
+    segs, info = BatchedInferencePipeline(model=model).transcribe(audio, language=lang, batch_size=8,
+                                                               initial_prompt=initial_prompt)
     segs = [{"start": s.start, "end": s.end, "text": s.text} for s in segs]
     return {"text": "".join(s["text"] for s in segs), "segments": segs,
             "language": info.language}
@@ -68,11 +69,16 @@ def transcribe(audio, outdir, lang=None, window=90):
     kw = dict(path_or_hf_repo=model_for(lang), verbose=False, condition_on_previous_text=False)
     if lang:
         kw["language"] = lang
+    # names from the private people file (R2R_PEOPLE) fix their spelling
+    from people import load, prompt
+    names = prompt(load())
+    if names:
+        kw["initial_prompt"] = names
     # mlx-whisper writes a tqdm bar to stderr regardless of verbose=False,
     # which drowns a batch log. Swallow it; keep real errors.
     buf = io.StringIO()
     if mlx_whisper is None:
-        r = fw_transcribe(audio, lang)
+        r = fw_transcribe(audio, lang, kw.get("initial_prompt"))
     else:
         with contextlib.redirect_stderr(buf):
             r = mlx_whisper.transcribe(audio, **kw)

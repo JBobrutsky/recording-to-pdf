@@ -151,6 +151,37 @@ called on is not always the one who answers. Ask the user who was absent before
 attributing by board order. If you keep a roster of correct name spellings,
 check it before writing names.
 
+**Who said it — rules that catch the common mistakes:**
+- A name at the start of a turn ("Dana, Yossi?") is usually who is being
+  *addressed*, not who speaks. Take the speaker from the timeline/green tile.
+- First-person statements ("I'm on vacation Sunday–Monday", "I'll send it",
+  "my team") belong to the person actually speaking — never to the name
+  mentioned just before.
+- `<<Name?>>` (with `?`) is a guess carried over from the last seen tile.
+  Check the frames at that offset before attributing anything personal
+  (absence, ownership, an opinion) to that person.
+- The user who recorded the meeting is a participant too; their own updates
+  get attributed to them like anyone else's.
+  Their own tile is often missing from the strip (self-view hidden), so when
+  they talk there is no green tile and the timeline shows the previous speaker
+  with `?`. A `?` run that answers a question put to someone else is often the user.
+
+**People file (private).** A people file says who is who: canonical full name, Zoom display name,
+English spelling, `gender`, nicknames/ASR misspellings (`aka`), team, role and
+what they work on. Format: `examples/people.example.md`. It holds real
+colleagues' details, so keep it **outside any repo** and point
+`R2R_PEOPLE` at it (`export R2R_PEOPLE=~/path/to/PEOPLE.md`). Then:
+- `r2r asr` passes every name + `aka` as whisper's `initial_prompt`;
+- `zoom_speakers.py` maps OCR'd tile names to the canonical name.
+
+When writing, read your private people file and use it:
+- **Gender** drives Hebrew verb/adjective agreement (סיפר/סיפרה, הציע/הציעה).
+  Never infer gender from a name; if it's `?` or the person isn't listed,
+  phrase neutrally ("לדברי X", "X: ...").
+- **Role / works on** resolve who an update or topic belongs to when ASR is
+  unclear (the portal migration update is Yossi's, not whoever was called).
+- **Spelling**: write the canonical name, not the ASR's version.
+
 **Render with an index:**
 ```bash
 $R render work/ --content content.json --name NAME --index reviews/INDEX.md
