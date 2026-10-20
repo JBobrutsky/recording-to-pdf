@@ -69,6 +69,21 @@ conference production mix insets the deck) and crops to it; frames where it
 finds nothing convincing pass through untouched, so the set stays whole.
 For Zoom, `clean()` also paints over the camera PIP and burnt-in timestamp.
 
+**Meetings are different: use `lib/screenshare.py`, not `r2r slides`.** In a
+meeting the pictures that matter are shared screens, and they hide among faces,
+avatars and app chrome. `r2r slides` is tuned for decks (big scene jumps) and
+dedupes whole frames, so the chrome makes different screens look identical —
+on 20 Oct 2026 that left 1 picture from an hour of screen-sharing. `screenshare.py`
+finds the shared-content rectangle in each frame (not dark UI, not desktop
+wallpaper, edge-dense; a skin-tone check rejects camera feeds), crops to it and
+dedupes on the crop:
+```bash
+.venv/bin/python lib/screenshare.py frames <window_jpgs_dir> work/frames   # Mac window captures
+.venv/bin/python lib/screenshare.py video  work/rec.mp4      work/frames --every 5
+```
+Result: `work/frames/kept/ss_NNN.jpg` (+ `.txt` with the source time) and
+`sheet_NN.jpg`. Same day: DevOps 1 → 5 pictures, a Meetup 3 → 10.
+
 **Reconcile transcript against deck.** The slides carry facts the audio does
 not, and ASR garbles domain terms and names. Verify every quote at its
 timestamp before it goes in.
@@ -89,6 +104,13 @@ Rules: interleave images with the argument, never append them; every quote
 verbatim (draft with `[m:ss]`, render strips them by default); when a deck is
 supplied, every slide goes in as an image next to its section; give each image a descriptive caption rather than
 repeating the heading; flag uncertain names instead of asserting them.
+
+Pictures in meetings: aim for at least one per topic where a screen was shared
+(typically 5–15 per hour). Never drop a useful frame because of a toolbar, a
+name strip or a corner of something private — crop it. Leave a frame out only
+when the content itself is an email header with addresses, a chat panel, a
+participant list or a dialog box; for an email body, crop off the
+From/To/CC block and keep the body.
 
 ## Meetings (work vs. not)
 
@@ -155,7 +177,8 @@ public repo, and don't send them anywhere the user didn't name.
   from `CGWindowListCopyWindowInfo` (owner `zoom.us`, name "Zoom Meeting",
   layer 0), re-resolved every minute — `lib/zoom_wincap.sh <scratch> <rec_dir>`
   with `lib/zoom_window.swift` does exactly this. Works while covered; fails only if
-  minimised. Feed those JPEGs to the slide step instead of `r2r slides`.
+  minimised. Feed those JPEGs to `lib/screenshare.py frames` (see above), not
+  `r2r slides`.
 - End trigger: poll `pgrep CptHost` (Zoom's in-meeting process). Never use
   System Events window lists — Accessibility can be revoked mid-meeting.
 - Health check every 3 min (frames growing, OBS up, audio not silent) and tell

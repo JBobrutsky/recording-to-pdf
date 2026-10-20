@@ -19,6 +19,7 @@ is the only artefact and nobody is going to watch it twice.
 | **fetch** | Resolves the recording and downloads it. Handles YouTube, auth-gated Zoom, AWS Summit / Corrivium livestream sites, direct HLS, and local files |
 | **asr** | Transcribes locally with Whisper — `mlx-whisper` on Apple Silicon, `faster-whisper` on CPU elsewhere; ivrit.ai's Hebrew fine-tune for `--lang he` — then collapses the output into 90-second timestamped blocks that are actually readable |
 | **slides** | Scene-detects the deck out of the video, removes near-duplicates, and crops the slide rectangle out of the stage shot |
+| **screens** | For meetings: `lib/screenshare.py` finds the shared-screen rectangle in each frame (skipping faces, avatars and app chrome), crops to it and dedupes on the content — an hour of screen-sharing gives the handful of screens that matter instead of one |
 | **render** | Takes a `content.json` and produces DOCX + PDF, slides interleaved with the argument. `[m:ss]` references are stripped by default (`--timestamps` keeps them); with a `meeting` object it adds decisions, assignments by owner, `record.json` and a row in an index |
 
 The writing between `slides` and `render` is yours — or your LLM's. That is
