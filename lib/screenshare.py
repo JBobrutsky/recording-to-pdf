@@ -23,7 +23,7 @@ from PIL import Image
 import cv2
 
 MIN_AREA = 0.10      # content box must cover >= 10% of the frame
-MIN_EDGES = 0.035    # fraction of edge pixels inside the box: text/UI, not a face
+MIN_EDGES = 0.012    # fraction of edge pixels: rejects blank screens and plain avatar tiles (faces are caught by SKIN)
 SKIN = 0.08         # skin-tone fraction above this = camera feed (faces), not a screen
 DIFF = 6.0           # mean abs grey difference (0-255) on a 96x54 thumbnail = "new picture"
 
@@ -33,7 +33,10 @@ def content_box(img):
     a = np.asarray(img.convert("RGB")).astype(np.int16)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
     grey = (r * 30 + g * 59 + b * 11) // 100
-    dark_ui = grey < 42                                   # Zoom/Meet chrome, black bars
+    sat = np.max(a, axis=2) - np.min(a, axis=2)
+    # Zoom/Meet chrome and black bars are dark AND neutral grey; dark-themed slides
+    # (navy, purple) are dark but coloured, so they stay content
+    dark_ui = (grey < 42) & (sat < 20)
     wallpaper = (b - np.maximum(r, g) > 45) & (b > 110)   # Windows blue desktop
     mask = (~(dark_ui | wallpaper)).astype(np.uint8)
     h, w = mask.shape
