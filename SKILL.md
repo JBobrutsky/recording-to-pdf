@@ -182,6 +182,15 @@ When writing, read your private people file and use it:
   unclear (the portal migration update is Yossi's, not whoever was called).
 - **Spelling**: write the canonical name, not the ASR's version.
 
+**Context file (private, optional).** Next to the people file you can keep a
+context file for a recurring meeting: a glossary of internal systems and terms
+(with the ASR's usual misspellings), the running topics with owner and status,
+and key dates. Read it before writing; it fixes names of systems, items and
+numbers the transcript garbles. The meeting wins when they conflict. To keep it
+current, put proposed changes in `meeting.context_updates` (strings, or
+`{item, old, new, date, source}`); `render` copies them to `record.json` and
+`context_updates.md` so a later session can apply them. Keep it outside any repo.
+
 **Render with an index:**
 ```bash
 $R render work/ --content content.json --name NAME --index reviews/INDEX.md

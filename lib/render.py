@@ -102,6 +102,13 @@ def write_record(spec, outdir, name, pdf, index=None):
            "participants": m.get("participants", []), "summary": m.get("summary", ""),
            "decisions": m.get("decisions", []), "actions": m.get("actions", []),
            "open_questions": m.get("open_questions", []), "pdf": os.path.abspath(pdf)}
+    if m.get("context_updates"):  # proposed edits to a private context file, applied by a later session
+        rec["context_updates"] = m["context_updates"]
+        open(os.path.join(outdir, "context_updates.md"), "w", encoding="utf-8").write(
+            "# Proposed context updates\n\n" + "\n".join(
+                f"- {u}" if isinstance(u, str) else
+                f"- {u.get('item','')}: {u.get('old','')} → {u.get('new','')} ({u.get('date','')}, {u.get('source','')})"
+                for u in m["context_updates"]) + "\n")
     rj = os.path.join(outdir, "record.json")
     json.dump(rec, open(rj, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     md = [f"# {rec['title']}", "",
