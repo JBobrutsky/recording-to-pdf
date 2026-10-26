@@ -217,6 +217,9 @@ the default mic (Zoom's output never has the user's own voice) and Zoom app
 video at 1080p/5 fps. That video is the backup for slides if the window frames fail:
 `screenshare.py video`. It also starts `zoom_wincap.sh`. `check` prints
 OK/FAIL for frames, OBS and audio, with what Whisper heard in the last 30 s.
+It refuses while OBS is already running (quitting it would lose a recording in
+progress); `--force` overrides. On speakers use `--no-mic`: the mic also hears Zoom,
+so everyone else would be recorded twice.
 
 - Audio: OBS (`open -a OBS --args --startrecording --minimize-to-tray`), source
   "macOS Screen Capture" in **application mode on Zoom** (scene JSON:

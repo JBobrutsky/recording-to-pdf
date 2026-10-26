@@ -1,11 +1,14 @@
 #!/bin/zsh
 # record a live Zoom meeting in one command (macOS): new folder, OBS audio + Zoom-app video backup, window frames.
-#   zoom_record.sh start [--lang he] [--root ~/Documents/r2r-work]   # run once you are in the meeting
+#   zoom_record.sh start [--lang he] [--root ~/Documents/r2r-work] [--no-mic] [--force]   # run once you are in the meeting
+#   It replaces OBS's R2R profile and scene, and refuses while OBS is running (it may be recording) unless --force.
+#   --no-mic: on speakers the mic also hears Zoom, so other people come out twice; use it then (your own voice is lost).
 #   zoom_record.sh check [rec_dir]                                   # health check; default: the latest recording
 # OBS needs Screen Recording + Microphone permission; the shell running this needs Screen Recording.
 H=${0:A:h}; PY=${H:h}/.venv/bin/python; O=~/Library/Application\ Support/obs-studio
-cmd=${1:-start}; shift; lang=""; root=~/Documents/r2r-work
-while (( $# )); do case $1 in --lang) lang=$2; shift 2;; --root) root=$2; shift 2;; *) R=$1; shift;; esac; done
+cmd=${1:-start}; shift; lang=""; root=~/Documents/r2r-work; mic=true; force=0
+while (( $# )); do case $1 in --lang) lang=$2; shift 2;; --root) root=$2; shift 2;; --no-mic) mic=false; shift;;
+  --force) force=1; shift;; *) R=$1; shift;; esac; done
 
 obs_config() {  # OBS overwrites its config on exit, so only call this with OBS closed
   local uuid=$(swift -e 'import ApplicationServices; print(CFUUIDCreateString(nil, CGDisplayCreateUUIDFromDisplayID(CGMainDisplayID())!.takeRetainedValue())!)' 2>/dev/null)
@@ -54,7 +57,7 @@ EOF
    "settings": {"type": 2, "application": "us.zoom.xos", "display_uuid": "$uuid", "show_cursor": false, "hide_obs": true}},
   {"id": "sck_audio_capture", "versioned_id": "sck_audio_capture", "name": "Zoom audio", "uuid": "22222222-2222-4222-8222-222222222222",
    "settings": {"type": 1, "application": "us.zoom.xos"}},
-  {"id": "coreaudio_input_capture", "versioned_id": "coreaudio_input_capture", "name": "Mic", "uuid": "33333333-3333-4333-8333-333333333333",
+  {"id": "coreaudio_input_capture", "versioned_id": "coreaudio_input_capture", "name": "Mic", "uuid": "33333333-3333-4333-8333-333333333333", "muted": $( [[ $mic == true ]] && echo false || echo true ),
    "settings": {"device_id": "default"}}]}
 EOF
 }
@@ -77,7 +80,7 @@ check() {  # frames growing, OBS recording, audio not silent and actually speech
     local model=mlx-community/whisper-large-v3-turbo; [[ $lang == he ]] && model=mlx-community/ivrit-ai-whisper-large-v3-turbo-mlx
     local text=$($PY -c "import sys,mlx_whisper;r=mlx_whisper.transcribe(sys.argv[1],path_or_hf_repo=sys.argv[2],language=sys.argv[3] or None,condition_on_previous_text=False);print(r['text'].strip())" $w $model "$lang" 2>/dev/null | tail -1)
     local words=$(print -r -- $text | wc -w | tr -d ' ')
-    if [[ -z $mean ]] || (( ${mean%.*} < -38 )) || (( words < 8 )); then
+    if [[ -z $mean || $mean == -inf ]] || (( ${mean%.*} < -38 )) || (( words < 8 )); then
       print "audio:   FAIL?  mean ${mean:-?} dB, $words words in the last 30 s (silence or nobody talking?)"; ok=0
     else print "audio:   OK  mean $mean dB, $words words"; fi
     print "heard:   \"${text[1,160]}\""
@@ -90,6 +93,7 @@ if [[ $cmd == check ]]; then R=${R:-$(cat $root/CURRENT 2>/dev/null)}; [[ -d $R 
 
 pgrep -q CptHost || { print "No Zoom meeting running (CptHost). Join the meeting first."; exit 1 }
 R=$root/zoom-$(date +%Y%m%d-%H%M); mkdir -p $R/win $R/scratch; print $R > $root/CURRENT
+if pgrep -q -x OBS && (( ! force )); then print "OBS is already running and may be recording: quitting it would lose that file. Stop it yourself, or pass --force."; exit 1; fi
 if pgrep -q -x OBS; then osascript -e 'quit app "OBS"' 2>/dev/null; for i in {1..10}; do pgrep -q -x OBS || break; sleep 1; done; pkill -x OBS; sleep 1; fi
 rm -rf "$O/.sentinel"; obs_config
 open -a OBS --args --profile R2R --collection R2R --startrecording --minimize-to-tray
